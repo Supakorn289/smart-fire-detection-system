@@ -2,13 +2,14 @@
 import requests
 from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 
-def send_line_notify(message, image_path=None):
-    # หมายเหตุ: ผมยังคงชื่อฟังก์ชันไว้ว่า send_line_notify เหมือนเดิม 
-    # เพื่อที่คุณจะได้ไม่ต้องไปแก้ใน main.py (หลอกโปรแกรมว่าเป็นไลน์แต่ส่งเข้า Telegram)
-    
+def send_telegram_notify(message, image_path=None):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("⚠️ ยังไม่ได้ตั้งค่า Token/Chat ID ใน config.py")
+        return
+
     print(f"📨 กำลังส่งแจ้งเตือนไปยัง Telegram...")
 
-    # 1. ส่งข้อความ (Text)
+    # 1. ส่งข้อความ
     try:
         url_msg = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         data = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
@@ -16,7 +17,7 @@ def send_line_notify(message, image_path=None):
     except Exception as e:
         print(f"❌ ส่งข้อความไม่ผ่าน: {e}")
 
-    # 2. ส่งรูปภาพ (Image) - ถ้ามี
+    # 2. ส่งรูปภาพ (ถ้ามี)
     if image_path:
         try:
             url_photo = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
