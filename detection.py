@@ -1,6 +1,5 @@
 # detection.py
 from ultralytics import YOLO
-import numpy as np
 from config import *
 
 class FireDetector:
@@ -9,47 +8,76 @@ class FireDetector:
         self.model = YOLO(MODEL_PATH)
         print("✅ Model Loaded!")
         
-        # รับค่า Calibration มาจาก config
-        self.pixel_y_near = PIXEL_Y_NEAR
-        self.dist_near = DIST_NEAR
-        self.pixel_y_far = PIXEL_Y_FAR
-        self.dist_far = DIST_FAR
+        # --- 1. การตั้งค่า Perspective Calibration (ระยะทาง 5m-30m) ---
+        # ใช้สูตร Two-Point Calibration แก้สมการหาค่า k และ vp_y
+        y1 = PIXEL_Y_BOTTOM
+        d1 = DIST_BOTTOM
+        y2 = PIXEL_Y_TOP
+        d2 = DIST_TOP
         
-        # มุมกล้องปัจจุบัน (อนาคตรับค่าจาก Hardware)
+        # แก้สมการหาค่าคงที่กล้อง (k)
+        # สูตร: k = (y1 - y2) / (1/d1 - 1/d2)
+        self.k = (y1 - y2) / ((1/d1) - (1/d2))
+        
+        # แทนค่า k กลับไปหาจุดขอบฟ้า (vp_y)
+        self.vp_y = y1 - (self.k / d1)
+        
+        self.vp_x = int(FRAME_WIDTH / 2) # จุดกึ่งกลางภาพแนวนอน
+        print(f"✅ Calibrated: VP_Y={self.vp_y:.1f}, K={self.k:.1f}")
+
+        # --- 2. การตั้งค่า Servo (ทิศทาง) ---
+        # รับค่ามุม Servo เริ่มต้นจาก Config
+        # ตัวแปรนี้จะเก็บค่ามุมปัจจุบันของมอเตอร์ เพื่อใช้คำนวณทิศจริง
         self.current_servo_angle = INITIAL_SERVO_ANGLE
 
-    def calculate_distance(self, y_bottom):
-        """แปลง Pixel Y -> ระยะทาง (เมตร)"""
-        if y_bottom > FRAME_HEIGHT: y_bottom = FRAME_HEIGHT
+    def update_servo_angle(self, angle):
+        """ 
+        ฟังก์ชันสำหรับอัปเดตค่ามุม Servo 
+        (เรียกใช้จาก main.py เมื่อมีการหมุนกล้อง/จำลองการหมุน) 
+        """
+        self.current_servo_angle = angle
+
+    def get_y_from_distance(self, distance_m):
+        """ แปลงระยะทาง (เมตร) -> ตำแหน่ง Pixel Y (Perspective Logic) """
+        if distance_m <= 0: return FRAME_HEIGHT
         
-        distance = np.interp(
-            y_bottom,
-            [self.pixel_y_far, self.pixel_y_near], # ช่วง Input (บน -> ล่าง)
-            [self.dist_far, self.dist_near]        # ช่วง Output (ไกล -> ใกล้)
-        )
+        # สูตร: y = vp_y + (k / distance)
+        pixel_offset = self.k / distance_m
+        y_pos = int(self.vp_y + pixel_offset)
+        
+        return y_pos
+
+    def get_distance_from_y(self, y_pixel):
+        """ แปลงตำแหน่ง Pixel Y -> ระยะทาง (เมตร) (Perspective Logic) """
+        # ป้องกันการหารด้วยศูนย์ (ถ้า y ตรงกับ vp_y พอดี)
+        if abs(y_pixel - self.vp_y) < 0.1: return 999.0
+        
+        # สูตรกลับ: distance = k / (y - vp_y)
+        distance = self.k / (y_pixel - self.vp_y)
+        
+        # ถ้าคำนวณแล้วระยะติดลบ (อยู่เหนือเส้นขอบฟ้า) ให้ปัดเป็นไกลมาก
+        if distance < 0: return 999.0
+        
         return round(distance, 1)
 
-    def get_y_from_distance(self, target_distance):
-        """แปลง ระยะทาง (เมตร) -> Pixel Y (เพื่อวาดเส้น Grid)"""
-        y_pixel = np.interp(
-            target_distance,
-            [self.dist_near, self.dist_far],       # ช่วง Input (ใกล้ -> ไกล)
-            [self.pixel_y_near, self.pixel_y_far]  # ช่วง Output (ล่าง -> บน)
-        )
-        return int(y_pixel)
-
     def calculate_azimuth(self, x_center):
-        """คำนวณมุมทิศ 360 องศา"""
-        # 1. หามุม Offset ในภาพ (-30 ถึง +30 องศา)
+        """
+        สูตร: ทิศจริง = มุม Servo + (ระยะห่างจากกลางภาพ * องศาต่อพิกเซล)
+        """
+        # 1. หาว่าวัตถุอยู่ห่างจากกลางภาพกี่พิกเซล (ซ้ายเป็นลบ, ขวาเป็นบวก)
         pixels_from_center = x_center - (FRAME_WIDTH / 2)
+        
+        # 2. แปลงพิกเซล เป็น องศา
         degrees_per_pixel = FOV_CAMERA / FRAME_WIDTH
-        offset_angle = pixels_from_center * degrees_per_pixel
+        angle_offset = pixels_from_center * degrees_per_pixel
         
-        # 2. รวมกับมุมจริงของกล้อง
-        final_angle = self.current_servo_angle + offset_angle
+        # 3. รวมกับมุมที่ Servo หันอยู่ (ใช้ตัวแปร self.current_servo_angle)
+        final_angle = self.current_servo_angle + angle_offset
         
-        # ปรับให้เป็น 0-360 เสมอ
-        return round(final_angle % 360, 1)
+        # 4. ปรับให้อยู่ในวงกลม 0-360 องศา
+        final_angle = final_angle % 360
+        
+        return round(final_angle, 1)
 
     def detect(self, frame):
         results = self.model(frame, verbose=False, conf=CONFIDENCE_THRESHOLD)
@@ -65,22 +93,22 @@ class FireDetector:
                 cls_id = int(box.cls[0])
                 class_name = self.model.names[cls_id]
 
-                # --- Logic C Calculations ---
+                # คำนวณจุดกึ่งกลางและฐานของวัตถุ
                 center_x = (x1 + x2) / 2
                 bottom_y = y2
 
+                # เรียกใช้ฟังก์ชันคำนวณมุม (Azimuth) และระยะ (Perspective Distance)
                 real_angle = self.calculate_azimuth(center_x)
-                real_distance = self.calculate_distance(bottom_y)
+                real_distance = self.get_distance_from_y(bottom_y)
 
-                # Filter เฉพาะ Fire/Smoke
                 target_keywords = ['fire', 'smoke', 'flame']
                 if any(word in class_name.lower() for word in target_keywords):
                     detections.append({
                         'bbox': (x1, y1, x2, y2),
                         'class': class_name,
                         'conf': conf,
-                        'angle': real_angle,
-                        'distance': real_distance
+                        'angle': real_angle,      # มุมจริง 360 องศา
+                        'distance': real_distance # ระยะทางจาก Perspective mapping
                     })
 
         return detections
