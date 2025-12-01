@@ -1,6 +1,7 @@
 # detection.py
 from ultralytics import YOLO
 from config import *
+import math  # ⚠️ จำเป็นสำหรับการคำนวณ GPS
 
 class FireDetector:
     def __init__(self):
@@ -8,76 +9,63 @@ class FireDetector:
         self.model = YOLO(MODEL_PATH)
         print("✅ Model Loaded!")
         
-        # --- 1. การตั้งค่า Perspective Calibration (ระยะทาง 5m-30m) ---
-        # ใช้สูตร Two-Point Calibration แก้สมการหาค่า k และ vp_y
-        y1 = PIXEL_Y_BOTTOM
-        d1 = DIST_BOTTOM
-        y2 = PIXEL_Y_TOP
-        d2 = DIST_TOP
+        # --- 1. Perspective Calibration (Two-Point: 5m - 30m) ---
+        y1 = PIXEL_Y_BOTTOM; d1 = DIST_BOTTOM
+        y2 = PIXEL_Y_TOP; d2 = DIST_TOP
         
-        # แก้สมการหาค่าคงที่กล้อง (k)
-        # สูตร: k = (y1 - y2) / (1/d1 - 1/d2)
         self.k = (y1 - y2) / ((1/d1) - (1/d2))
-        
-        # แทนค่า k กลับไปหาจุดขอบฟ้า (vp_y)
         self.vp_y = y1 - (self.k / d1)
+        self.vp_x = int(FRAME_WIDTH / 2)
         
-        self.vp_x = int(FRAME_WIDTH / 2) # จุดกึ่งกลางภาพแนวนอน
         print(f"✅ Calibrated: VP_Y={self.vp_y:.1f}, K={self.k:.1f}")
 
-        # --- 2. การตั้งค่า Servo (ทิศทาง) ---
-        # รับค่ามุม Servo เริ่มต้นจาก Config
-        # ตัวแปรนี้จะเก็บค่ามุมปัจจุบันของมอเตอร์ เพื่อใช้คำนวณทิศจริง
+        # --- 2. Servo Setting ---
         self.current_servo_angle = INITIAL_SERVO_ANGLE
 
+        # --- 3. GPS Setting ---
+        self.camera_lat = CAMERA_LAT
+        self.camera_lon = CAMERA_LON
+
     def update_servo_angle(self, angle):
-        """ 
-        ฟังก์ชันสำหรับอัปเดตค่ามุม Servo 
-        (เรียกใช้จาก main.py เมื่อมีการหมุนกล้อง/จำลองการหมุน) 
-        """
+        """ อัปเดตมุม Servo """
         self.current_servo_angle = angle
 
     def get_y_from_distance(self, distance_m):
-        """ แปลงระยะทาง (เมตร) -> ตำแหน่ง Pixel Y (Perspective Logic) """
+        """ แปลงระยะทาง (m) -> Pixel Y """
         if distance_m <= 0: return FRAME_HEIGHT
-        
-        # สูตร: y = vp_y + (k / distance)
-        pixel_offset = self.k / distance_m
-        y_pos = int(self.vp_y + pixel_offset)
-        
-        return y_pos
+        return int(self.vp_y + (self.k / distance_m))
 
     def get_distance_from_y(self, y_pixel):
-        """ แปลงตำแหน่ง Pixel Y -> ระยะทาง (เมตร) (Perspective Logic) """
-        # ป้องกันการหารด้วยศูนย์ (ถ้า y ตรงกับ vp_y พอดี)
+        """ แปลง Pixel Y -> ระยะทาง (m) """
         if abs(y_pixel - self.vp_y) < 0.1: return 999.0
-        
-        # สูตรกลับ: distance = k / (y - vp_y)
         distance = self.k / (y_pixel - self.vp_y)
-        
-        # ถ้าคำนวณแล้วระยะติดลบ (อยู่เหนือเส้นขอบฟ้า) ให้ปัดเป็นไกลมาก
         if distance < 0: return 999.0
-        
         return round(distance, 1)
 
     def calculate_azimuth(self, x_center):
-        """
-        สูตร: ทิศจริง = มุม Servo + (ระยะห่างจากกลางภาพ * องศาต่อพิกเซล)
-        """
-        # 1. หาว่าวัตถุอยู่ห่างจากกลางภาพกี่พิกเซล (ซ้ายเป็นลบ, ขวาเป็นบวก)
+        """ คำนวณทิศทางจริง (Azimuth) """
         pixels_from_center = x_center - (FRAME_WIDTH / 2)
-        
-        # 2. แปลงพิกเซล เป็น องศา
         degrees_per_pixel = FOV_CAMERA / FRAME_WIDTH
-        angle_offset = pixels_from_center * degrees_per_pixel
+        offset_angle = pixels_from_center * degrees_per_pixel
         
-        # 3. รวมกับมุมที่ Servo หันอยู่ (ใช้ตัวแปร self.current_servo_angle)
-        final_angle = self.current_servo_angle + angle_offset
+        final_angle = self.current_servo_angle + offset_angle
+        return round(final_angle % 360, 1)
+
+    def calculate_gps_target(self, distance_meters, bearing_degrees):
+        """ 🌍 คำนวณพิกัดปลายทาง (จุดไฟไหม้) """
+        R = 6378137 # รัศมีโลก (เมตร)
         
-        # 4. ปรับให้อยู่ในวงกลม 0-360 องศา
-        final_angle = final_angle % 360
-        
-        return round(final_angle, 1)
+        lat1 = math.radians(self.camera_lat)
+        lon1 = math.radians(self.camera_lon)
+        bearing = math.radians(bearing_degrees)
+
+        lat2 = math.asin(math.sin(lat1) * math.cos(distance_meters / R) +
+                         math.cos(lat1) * math.sin(distance_meters / R) * math.cos(bearing))
+
+        lon2 = lon1 + math.atan2(math.sin(bearing) * math.sin(distance_meters / R) * math.cos(lat1),
+                                 math.cos(distance_meters / R) - math.sin(lat1) * math.sin(lat2))
+
+        return math.degrees(lat2), math.degrees(lon2)
 
     def detect(self, frame):
         results = self.model(frame, verbose=False, conf=CONFIDENCE_THRESHOLD)
@@ -92,23 +80,40 @@ class FireDetector:
                 conf = float(box.conf[0])
                 cls_id = int(box.cls[0])
                 class_name = self.model.names[cls_id]
+                class_lower = class_name.lower()
 
-                # คำนวณจุดกึ่งกลางและฐานของวัตถุ
+                # =========================================================
+                # 🔥 LOGIC กรองแยกประเภท (Smart Filtering)
+                # =========================================================
+                if 'smoke' in class_lower:
+                    if conf < SMOKE_THRESHOLD: continue 
+                elif 'fire' in class_lower or 'flame' in class_lower:
+                    if conf < FIRE_THRESHOLD: continue
+                
+                # กรองขนาด (Size Filter)
+                object_area = (x2 - x1) * (y2 - y1)
+                if (object_area / (FRAME_WIDTH * FRAME_HEIGHT)) < 0.015: continue
+                # =========================================================
+
+                # คำนวณค่าทางฟิสิกส์
                 center_x = (x1 + x2) / 2
                 bottom_y = y2
 
-                # เรียกใช้ฟังก์ชันคำนวณมุม (Azimuth) และระยะ (Perspective Distance)
                 real_angle = self.calculate_azimuth(center_x)
                 real_distance = self.get_distance_from_y(bottom_y)
 
+                # 🌍 คำนวณ GPS เป้าหมาย
+                fire_lat, fire_lon = self.calculate_gps_target(real_distance, real_angle)
+
                 target_keywords = ['fire', 'smoke', 'flame']
-                if any(word in class_name.lower() for word in target_keywords):
+                if any(word in class_lower for word in target_keywords):
                     detections.append({
                         'bbox': (x1, y1, x2, y2),
                         'class': class_name,
                         'conf': conf,
-                        'angle': real_angle,      # มุมจริง 360 องศา
-                        'distance': real_distance # ระยะทางจาก Perspective mapping
+                        'angle': real_angle,
+                        'distance': real_distance,
+                        'gps': (fire_lat, fire_lon) # ส่งพิกัดออกไป
                     })
 
         return detections

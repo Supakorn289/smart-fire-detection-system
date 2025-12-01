@@ -4,28 +4,35 @@
 CAMERA_ID = 0           
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-FOV_CAMERA = 60.0       
+FOV_CAMERA = 60.0       # มุมมองกว้างของกล้อง (Field of View)
 
 # --- 2. ตั้งค่า AI ---
 MODEL_PATH = 'models/fire.pt'  
-CONFIDENCE_THRESHOLD = 0.4     
+
+# ค่าความมั่นใจพื้นฐาน
+CONFIDENCE_THRESHOLD = 0.3     
+
+# เกณฑ์แยกประเภท (Double Standard)
+FIRE_THRESHOLD = 0.50      # ไฟ: 50% ขึ้นไป
+SMOKE_THRESHOLD = 0.75     # ควัน: 75% ขึ้นไป (กรองเข้มงวด)
 
 # --- 3. ตั้งค่า Telegram ---
 TELEGRAM_TOKEN = 'ใส่_TOKEN_ของคุณที่นี่'
 TELEGRAM_CHAT_ID = 'ใส่_CHAT_ID_ของคุณที่นี่'
 
-# --- 4. ตั้งค่า Calibration (สำคัญมาก!) ---
-# กำหนดตำแหน่ง Pixel ที่ต้องการให้เส้นปรากฏบนจอ
-
+# --- 4. ตั้งค่า Calibration (ระยะทาง 5m-30m) ---
 # จุดล่างสุด (Bottom Line) = 5 เมตร
-# ให้ยึดติดขอบล่างจอเลย
 PIXEL_Y_BOTTOM = FRAME_HEIGHT - 10 
 DIST_BOTTOM = 5.0   
 
 # จุดบนสุดของ Grid (Top Apex) = 30 เมตร
-# กำหนดให้เส้น 30m อยู่ตรงกลางจอพอดี (หรือปรับเลขนี้ถ้าอยากให้สูง/ต่ำกว่านี้)
 PIXEL_Y_TOP = 200    
 DIST_TOP = 30.0      
 
-# มุมเริ่มต้นของกล้อง
-INITIAL_SERVO_ANGLE = 90
+# --- 5. ตั้งค่า Servo ---
+INITIAL_SERVO_ANGLE = 0   # มุมเริ่มต้นของ Servo (0 องศา = หันตรงหน้า)
+
+# --- 6. 🌍 ตั้งค่าพิกัด GPS ของกล้อง (เชียงใหม่) ---
+# จากลิงก์ที่คุณให้มา: 18.792669, 98.983969
+CAMERA_LAT = 18.79273619036605
+CAMERA_LON = 98.98380734578086
