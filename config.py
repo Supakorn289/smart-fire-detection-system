@@ -17,8 +17,8 @@ FIRE_THRESHOLD = 0.50      # ไฟ: 50% ขึ้นไป
 SMOKE_THRESHOLD = 0.75     # ควัน: 75% ขึ้นไป (กรองเข้มงวด)
 
 # --- 3. ตั้งค่า Telegram ---
-TELEGRAM_TOKEN = 'ใส่_TOKEN_ของคุณที่นี่'
-TELEGRAM_CHAT_ID = 'ใส่_CHAT_ID_ของคุณที่นี่'
+TELEGRAM_TOKEN = '8347036032:AAH1YCXsalj8mce2QU6ashdxTAK_ARyB3xc' 
+TELEGRAM_CHAT_ID = '7372449059'
 
 # --- 4. ตั้งค่า Calibration (ระยะทาง 5m-30m) ---
 # จุดล่างสุด (Bottom Line) = 5 เมตร
