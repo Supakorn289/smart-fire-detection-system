@@ -4,35 +4,30 @@
 CAMERA_ID = 0           
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-FOV_CAMERA = 60.0       # มุมมองกว้างของกล้อง (Field of View)
+FOV_CAMERA = 60.0       
 
 # --- 2. ตั้งค่า AI ---
 MODEL_PATH = 'models/fire.pt'  
-
-# ค่าความมั่นใจพื้นฐาน
 CONFIDENCE_THRESHOLD = 0.3     
-
-# เกณฑ์แยกประเภท (Double Standard)
-FIRE_THRESHOLD = 0.50      # ไฟ: 50% ขึ้นไป
-SMOKE_THRESHOLD = 0.75     # ควัน: 75% ขึ้นไป (กรองเข้มงวด)
+FIRE_THRESHOLD = 0.50      
+SMOKE_THRESHOLD = 0.75     
 
 # --- 3. ตั้งค่า Telegram ---
 TELEGRAM_TOKEN = '8347036032:AAH1YCXsalj8mce2QU6ashdxTAK_ARyB3xc' 
 TELEGRAM_CHAT_ID = '7372449059'
 
-# --- 4. ตั้งค่า Calibration (ระยะทาง 5m-30m) ---
-# จุดล่างสุด (Bottom Line) = 5 เมตร
-PIXEL_Y_BOTTOM = FRAME_HEIGHT - 10 
-DIST_BOTTOM = 5.0   
+# --- 4. 📐 ตั้งค่าระยะทาง (Single-Axis Perspective Theory) ---
+# ตัวแปร Z: ระยะทางจริง (หน่วย: เมตร)
+MIN_DISTANCE = 1.0   # Z1: ระยะทางที่ใกล้ที่สุด 
+MAX_DISTANCE = 10.0  # Z2: ระยะทางที่ไกลที่สุด
 
-# จุดบนสุดของ Grid (Top Apex) = 30 เมตร
-PIXEL_Y_TOP = 200    
-DIST_TOP = 30.0      
+# ตัวแปร y: ตำแหน่งบนหน้าจอแกน Y (OpenCV: ขอบบนคือ 0, ขอบล่างคือ 480)
+MIN_DIST_Y_PIXEL = FRAME_HEIGHT - 10     # y1: พิกเซลขอบเขตใกล้สุด (ชิดขอบล่าง)
+MAX_DIST_Y_PIXEL = int(FRAME_HEIGHT / 2) # y2: พิกเซลขอบเขตไกลสุด (กลางภาพ)
 
 # --- 5. ตั้งค่า Servo ---
-INITIAL_SERVO_ANGLE = 0   # มุมเริ่มต้นของ Servo (0 องศา = หันตรงหน้า)
+INITIAL_SERVO_ANGLE = 0   
 
-# --- 6. 🌍 ตั้งค่าพิกัด GPS ของกล้อง (เชียงใหม่) ---
-# จากลิงก์ที่คุณให้มา: 18.792669, 98.983969
+# --- 6. 🌍 ตั้งค่าพิกัด GPS ---
 CAMERA_LAT = 18.79273619036605
 CAMERA_LON = 98.98380734578086

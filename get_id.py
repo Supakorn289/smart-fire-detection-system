@@ -1,3 +1,5 @@
+# get_id.py
+# สคริปต์นี้จะช่วยคุณหาค่า Chat ID ของ Telegram เพื่อใช้ใน
 import requests
 import time
 # เอา Token ของคุณมาใส่ตรงนี้ (ห้ามลบเครื่องหมายคำพูด)
